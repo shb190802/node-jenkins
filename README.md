@@ -1,6 +1,8 @@
 # node-jenkins
 使用nodejs模拟的jenkins打包vue项目功能
 
+**正式使用的时候可以使用koa创建一个webserver，封装API通过浏览器给团队其他人使用！**
+
 基本流程
 * 下载代码
 * 执行install 和 build
