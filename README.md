@@ -22,3 +22,8 @@
 	})
 	release.publish()
 ```
+
+
+
+![](http://suohb.com/images/jenkins.png)
+
