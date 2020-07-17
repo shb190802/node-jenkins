@@ -11,7 +11,11 @@
 	"license": "ISC",
 	"dependencies": {
 		"colors": "^1.4.0",
+		"download-git-repo": "^3.0.2",
 		"fs-extra": "^9.0.0",
+		"koa": "^2.12.0",
+		"koa-router": "^9.0.1",
+		"koa-static": "^5.0.0",
 		"moment": "^2.26.0",
 		"ssh2-sftp-client": "^5.1.2"
 	}

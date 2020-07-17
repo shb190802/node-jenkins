@@ -1,7 +1,7 @@
 const exec = require('child_process').exec
 const path = require('path')
 const Sftp = require('ssh2-sftp-client')
-// const download = require('download-git-repo')
+const download = require('download-git-repo')
 const fse = require('fs-extra')
 const moment = require('moment')
 require('colors')
@@ -26,6 +26,7 @@ class Release {
 		this.host = options.host || ''
 		this.username = options.username || ''
 		this.password = options.password || ''
+		this.clearRemoteDir = options.clearRemoteDir || false
 	}
 
 	async publish () {
@@ -39,6 +40,7 @@ class Release {
 		for (let i = 0, len = this.buildCommand.length; i < len; i++) {
 			await this.exec(this.buildCommand[i])
 		}
+		await this.sleep(1000)
 		let sourcePath = path.join(WORKSPACE, this.projectName, this.outputPath) // 编译后的本地dist目录
 		if (this.host && this.username && this.password && this.remotePath) {
 			if (!/^(\/[^/]+){3}/.test(this.remotePath)) {
@@ -51,6 +53,10 @@ class Release {
 				username: this.username,
 				password: this.password
 			})
+			if(this.clearRemoteDir) {
+				console.log(`rmdir ${this.remotePath}`.green)
+				await client.rmdir(this.remotePath, true)
+			}
 			console.log(`mkdir ${this.remotePath}`.green)
 			await client.mkdir(this.remotePath, true)
 			console.log(`传输文件【${sourcePath}】===>【${this.remotePath}】`.green)
@@ -84,27 +90,37 @@ class Release {
 				console.log(`清除临时代码目录:${tempPath}`.yellow)
 				fse.removeSync(tempPath)
 			}
-			let command = `git clone -b ${this.branch} ${this.repo} ${tempPath}`
-			await this.exec(command, WORKSPACE)
-			console.log(`拉取文件成功！`.green)
-			if (fse.pathExistsSync(workPath)) {
-				if (fse.pathExistsSync(dependPath)) {
-					console.log('保存工作目录node_modules'.green)
-					fse.removeSync(tempDependPath)
-					fse.moveSync(dependPath, tempDependPath)
-				}
-				console.log('清空工作区目录'.yellow)
-				fse.removeSync(workPath)
-			}
-			console.log('构建新的工作目录'.green)
-			await this.sleep(100)
-			fse.moveSync(tempPath, workPath)
-			if (fse.pathExistsSync(tempDependPath)) {
-				console.log('恢复node_modules'.green)
-				fse.removeSync(dependPath)
-				fse.moveSync(tempDependPath, dependPath)
-			}
-			resolve(true)
+			let repo = `direct:${this.repo}#${this.branch}`
+			console.log(`request ${repo}`.green)
+			download(repo,tempPath,{clone:true},async (err) =>{
+					if(err) {
+							console.log(err)
+							reject(false)
+					}else {
+						try{
+							console.log(`拉取文件成功！`.green)
+							if(fse.pathExistsSync(workPath)) {
+								if(fse.pathExistsSync(dependPath)) {
+										console.log('保存node_modules')
+										fse.removeSync(tempDependPath)
+										fse.moveSync(dependPath,tempDependPath)
+								}
+								console.log('清空工作区目录'.yellow)
+								fse.removeSync(workPath)
+							}
+							console.log('构建工作目录'.green)
+							await this.sleep(1000)
+							fse.moveSync(tempPath,workPath)
+							if(fse.pathExistsSync(tempDependPath)) {
+									console.log('恢复node_modules')
+									fse.moveSync(tempDependPath,dependPath)
+							}
+							resolve(true)
+						}catch{
+							reject(false)
+						}
+					}
+			})
 		})
 	}
 
@@ -132,26 +148,31 @@ class Release {
 	}
 
 	saveBuildInfo (time) {
-		let buildInfo = {}
+		let buildList = []
 		if (fse.pathExistsSync(BUILD_HISTORY)) {
-			buildInfo = JSON.parse(fse.readFileSync(BUILD_HISTORY, 'utf8'))
+			buildList = JSON.parse(fse.readFileSync(BUILD_HISTORY, 'utf8'))
 		}
-		buildInfo[this.projectName] = {
+		buildList.unshift({
 			buildAt: moment().format('YYYY-MM-DD HH:mm:ss'),
 			repo: this.repo,
 			branch: this.branch,
 			projectName: this.projectName,
 			buildTime: time
-		}
-		fse.writeFileSync(BUILD_HISTORY, JSON.stringify(buildInfo), 'utf8')
+		})
+		buildList = buildList.slice(0,10)
+		fse.writeFileSync(BUILD_HISTORY, JSON.stringify(buildList), 'utf8')
 	}
 
 	getLastBuildTime () {
+		let buildTime = -1
 		if (fse.pathExistsSync(BUILD_HISTORY)) {
-			let buildInfo = JSON.parse(fse.readFileSync(BUILD_HISTORY, 'utf8'))
-			return buildInfo[this.projectName] ? buildInfo[this.projectName].buildTime : -1
+			let buildList = JSON.parse(fse.readFileSync(BUILD_HISTORY, 'utf8'))
+			buildList.find(item =>{
+				buildTime = item.buildTime
+				return item.projectName === this.projectName 
+			})
 		}
-		return -1
+		return buildTime
 	}
 
 	sleep (time) {

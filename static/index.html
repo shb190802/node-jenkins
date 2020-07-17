@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="X-UA-Compatible" content="ie=edge">
+	<title>前端自动发版程序</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			font-size: 16px;
+		}
+
+		.box {
+			position: relative;
+			width: 800px;
+			padding: 30px;
+			border: solid 1px #ddd;
+			margin: 30px auto 0 !important;
+		}
+
+		.title {
+			position: absolute;
+			left: 40px;
+			top: -20px;
+			background: #fff;
+			padding: 10px;
+			font-size: 16px;
+			border: solid 1px #ddd;
+		}
+
+		.item {
+			position: relative;
+			padding: 10px;
+			border-bottom: dashed 1px #ddd;
+			display: flex;
+		}
+
+		.log[data^="building"] {
+			color: #ffa500;
+		}
+
+		.log[data^="build success"] {
+			color: green;
+		}
+
+		.log[data^="build error"] {
+			color: red;
+		}
+
+		.log[data^="building"]::after {
+			content: " ";
+			animation: ellipsis 2s ease-in infinite;
+			color: #ffa500;
+		}
+
+		@keyframes ellipsis {
+			0% {
+				content: '';
+			}
+
+			25% {
+				content: '。';
+			}
+
+			50% {
+				content: '。。';
+			}
+
+			75% {
+				content: '。。。';
+			}
+		}
+
+		button {
+			position: absolute;
+			right: 20px;
+			background: #f5f5f5;
+			border: solid 1px #ddd;
+			padding: 3px 10px;
+			font-size: 14px;
+			margin-left: 100px;
+		}
+
+		.name {
+			width: 150px;
+		}
+
+		.log {
+			width: 500px;
+		}
+	</style>
+</head>
+
+<body>
+	<div class="box">
+		<div class="title">编译项目</div>
+		<div class="content" id="buildProject"></div>
+	</div>
+	<div class="box">
+		<div class="title">编译历史</div>
+		<div class="content" id="buildHistory"></div>
+	</div>
+	<script>
+		var isBuilding = false
+		var lastBuildStatus = ''
+		var buildHistoryList = []
+
+		var buildHistory = document.getElementById('buildHistory')
+		var buildProject = document.getElementById('buildProject')
+
+		var buildProjectList = []
+
+		function request(url, callback) {
+			var xhr = new XMLHttpRequest()
+			xhr.open("GET", url, true)
+			xhr.onreadystatechange = function () {
+				if (xhr.status === 200 && xhr.readyState === 4) {
+					callback(xhr.responseText)
+				}
+			}
+			xhr.send()
+		}
+
+		function getProjcet(callback) {
+			if (document.hidden) return
+			request('/project', function (res) {
+				res = JSON.parse(res)
+				console.log(res)
+				if (res.state === 'ok') {
+					res.project.forEach(item => {
+						buildProjectList.push(...item.branch)
+					})
+					console.log('buildProjectList', buildProjectList)
+					callback()
+				}
+			})
+		}
+		function checkstatus() {
+			if (document.hidden) return
+			request('/status', function (res) {
+				res = JSON.parse(res)
+				console.log(res)
+				try {
+					buildHistoryList = JSON.parse(res.history)
+				} catch (e) { }
+				isBuilding = /building/.test(res.status)
+				lastBuildStatus = res.status
+				updateDom()
+			})
+		}
+
+		function build(projcet, branch) {
+			request(`/publish?project=${projcet}&branch=${branch}`, function (res) {
+				res = JSON.parse(res)
+				if (res.state === 'ok') {
+					checkstatus()
+				} else {
+					alert(res.data)
+				}
+			})
+		}
+
+		function updateDom() {
+			buildHistory.innerHTML = buildHistoryList.map(item => {
+				return `<div class="item">${item.projectName}#${item.branch}, build at ${item.buildAt}，编译时间：【${item.buildTime}s】</div>`
+			}).join('')
+			buildProject.innerHTML = buildProjectList.map(item => {
+				let log = ''
+				if (lastBuildStatus.includes(item.project + '#' + item.branch)) {
+					log = lastBuildStatus
+				}
+				return `<div class="item">
+            <div class="name">${item.name}</div>
+            <div class="log" data="${log}">${log}</div>
+            <button ${isBuilding ? 'disabled' : ''} onclick="build('${item.project}','${item.branch}')">编译</button>
+          </div>`
+			}).join('')
+		}
+
+		window.onload = function () {
+			getProjcet(() => {
+				checkstatus()
+				setInterval(checkstatus, 30000)
+				document.addEventListener('visibilitychange', () => {
+					console.log('visibilitychange hidden=', document.hidden)
+					if (!document.hidden) {
+						checkstatus()
+					}
+				})
+			})
+		}
+	</script>
+</body>
+
+</html>
