@@ -19,8 +19,8 @@
 
 
 
-![](./static/images/1.png)
 
+![](http://suohb.com/images/jenkins2.png)
 
 ![](http://suohb.com/images/jenkins.png)
 
